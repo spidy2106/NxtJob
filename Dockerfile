@@ -7,4 +7,5 @@ COPY target/*.jar app.jar
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# The "-Dspring.profiles.active=docker" part is the magic switch
+ENTRYPOINT ["java", "-Dspring.profiles.active=docker", "-jar", "app.jar"]

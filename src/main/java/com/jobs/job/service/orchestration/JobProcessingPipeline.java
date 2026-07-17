@@ -1,17 +1,18 @@
 package com.jobs.job.service.orchestration;
 
-
 import com.jobs.job.entity.Job;
 import com.jobs.job.entity.User;
+import com.jobs.job.entity.UserPreference;
 import com.jobs.job.repository.JobRepository;
 import com.jobs.job.repository.UserRepository;
+import com.jobs.job.repository.UserPreferenceRepository;
+import com.jobs.job.ai.JobMatchAiService;
 import com.jobs.job.service.email.EmailReaderService;
 import com.jobs.job.service.job.JobNormalizationService;
 import com.jobs.job.service.notification.EmailNotificationService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
@@ -22,7 +23,9 @@ public class JobProcessingPipeline {
     private final JobNormalizationService normalizer;
     private final JobRepository jobRepository;
     private final UserRepository userRepository;
+    private final UserPreferenceRepository preferenceRepository;
     private final EmailNotificationService notificationService;
+    private final JobMatchAiService aiService;
 
     public void process() {
 
@@ -32,13 +35,14 @@ public class JobProcessingPipeline {
         log.info("Active users count: {}", users.size());
 
         emailReader.readLinkedInJobEmails().forEach(rawEmail -> {
+
             log.info("Processing LinkedIn email");
 
             Job job = normalizer.normalize(rawEmail, "LINKEDIN_EMAIL");
             log.info("Extracted jobId={}", job.getJobId());
 
             if (jobRepository.existsById(job.getJobId())) {
-                log.info("Job already exists in DB, skipping notification for jobId={}", job.getJobId());
+                log.info("Job already exists, skipping jobId={}", job.getJobId());
                 return;
             }
 
@@ -48,13 +52,38 @@ public class JobProcessingPipeline {
             users.stream()
                     .filter(User::getActive)
                     .forEach(user -> {
-                        log.info("Sending email to {}", user.getEmail());
-                        notificationService.sendJobAlert(
-                                user.getEmail(),
-                                job.getTitle(),
-                                job.getCompany(),
-                                job.getSource()
-                        );
+
+                        preferenceRepository.findByUser_Id(user.getId())
+                                .ifPresent(pref -> {
+
+                                    int score = aiService.matchScore(job, pref);
+
+                                    log.info(
+                                            "Match score user={} jobId={} score={}",
+                                            user.getEmail(),
+                                            job.getJobId(),
+                                            score
+                                    );
+
+                                    if (score < pref.getMinMatchScore()) {
+                                        log.debug(
+                                                "Skipping email for user={} (score {} < {})",
+                                                user.getEmail(),
+                                                score,
+                                                pref.getMinMatchScore()
+                                        );
+                                        return;
+                                    }
+
+                                    log.info("Sending job alert to {}", user.getEmail());
+
+                                    notificationService.sendJobAlert(
+                                            user.getEmail(),
+                                            job.getTitle(),
+                                            job.getCompany(),
+                                            job.getSource()
+                                    );
+                                });
                     });
         });
 

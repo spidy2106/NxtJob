@@ -86,7 +86,7 @@ public class EmailReaderService {
 
             Message[] messages = inbox.getMessages(start, totalMessages);
 
-            long maxUidSeen = lastProcessedUid;
+            long maxUidSeen = lastProcessedUid;//lastProcessedUid
 
             for (Message message : messages) {
 
