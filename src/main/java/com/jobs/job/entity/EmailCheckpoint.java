@@ -12,7 +12,7 @@ import lombok.Setter;
 @Setter
 public class EmailCheckpoint {
 
-    @Id
+    @Id                                 // this is done by suvam sahani
     private String mailbox; // e.g. LINKEDIN
 
     private long lastProcessedUid;
